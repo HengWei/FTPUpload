@@ -56,6 +56,8 @@ namespace WebUploadTool
                         Value = file
                     });
                 }
+
+                comboBox1.SelectedIndex = 0;
             }
             catch (Exception ex)
             {
@@ -75,39 +77,37 @@ namespace WebUploadTool
 
         private void button1_Click(object sender, EventArgs e)
         {
+
+            var unzipFolder = $"{AppDomain.CurrentDomain.BaseDirectory}TEMP\\";
+
             try
             {
+                
+
+                var fileName = comboBox1.GetItemText(comboBox1.SelectedItem);
+
                 //解壓縮
-
-                var fileName = "v1.0.zip";
-                var filePath = $"{config.ip}TEST/{fileName}";
+                System.IO.Compression.ZipFile.ExtractToDirectory($"{AppDomain.CurrentDomain.BaseDirectory}{fileName}", unzipFolder);
 
 
-                //上傳FTP
-                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(filePath);
-                request.Method = WebRequestMethods.Ftp.UploadFile;
-                // This example assumes the FTP site uses anonymous logon.  
-                request.Credentials = new NetworkCredential(config.user, config.password);
-                request.Proxy = null;
-                request.KeepAlive = true;
-                request.UseBinary = true;
-                request.Method = WebRequestMethods.Ftp.UploadFile;
+                var fileUploadPath = "TEST/";
 
-                // Copy the contents of the file to the request stream.  
-                using (StreamReader sourceStream = new StreamReader($"{AppDomain.CurrentDomain.BaseDirectory}{fileName}"))
+                var filePath = "TEST/";
+                
+
+                if (!Directory.Exists(unzipFolder))
                 {
-                    byte[] fileContents = Encoding.UTF8.GetBytes(sourceStream.ReadToEnd());
-                    request.ContentLength = fileContents.Length;
-
-                    using (Stream requestStream = request.GetRequestStream())
-                    {
-                        requestStream.Write(fileContents, 0, fileContents.Length);
-                    }
+                    Directory.CreateDirectory(unzipFolder);
                 }
 
 
-                FtpWebResponse response = (FtpWebResponse)request.GetResponse();
-                Console.WriteLine("Upload File Complete, status {0}", response.StatusDescription);
+
+                //處理資料
+                FTPProcess(unzipFolder, config);
+
+                //CreateFolder(config, fileUploadPath );
+
+                //UploadFile(config, fileUploadPath, fileName);
 
                 //完成
 
@@ -118,12 +118,39 @@ namespace WebUploadTool
                 MessageBox.Show(ex.Message);
 
             }
+            finally 
+            {
+                var dir = new DirectoryInfo(unzipFolder);
+                dir.Delete(true);
+            }
 
 
 
 
         }
 
+
+        public static void FTPProcess(string path, config config)
+        {
+            DirectoryInfo d = new DirectoryInfo(path); //Assuming Test is your Folder
+
+            var folders = d.GetDirectories();
+
+            foreach (var folder in folders)
+            {                
+                CreateFolder(config, $"{path.Replace($"{AppDomain.CurrentDomain.BaseDirectory}TEMP\\", "")}{folder.Name}");
+                FTPProcess($"{path}{folder}", config);
+            }
+
+
+            var Files = d.GetFiles();
+
+            foreach (var file in Files)
+            {
+                UploadFile(config, path, file.Name);
+            }
+
+        }
 
         public static void CreateFolder(config config, string folderName)
         {
@@ -134,8 +161,7 @@ namespace WebUploadTool
             request.Credentials = new NetworkCredential(config.user, config.password);
             request.Proxy = null;
             request.KeepAlive = true;
-            request.UseBinary = true;
-            request.Method = WebRequestMethods.Ftp.UploadFile;
+            request.UseBinary = true;         
 
             // Copy the contents of the file to the request stream.  
 
@@ -155,7 +181,7 @@ namespace WebUploadTool
             request.Proxy = null;
             request.KeepAlive = true;
             request.UseBinary = true;
-            request.Method = WebRequestMethods.Ftp.UploadFile;
+        
 
             // Copy the contents of the file to the request stream.  
             using (StreamReader sourceStream = new StreamReader($"{AppDomain.CurrentDomain.BaseDirectory}{fileName}"))
