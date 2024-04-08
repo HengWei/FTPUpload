@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.IO;
 using System.Text;
+using System.Diagnostics;
 
 namespace WebUploadTool
 {
@@ -78,40 +79,37 @@ namespace WebUploadTool
         private void button1_Click(object sender, EventArgs e)
         {
 
-            var unzipFolder = $"{AppDomain.CurrentDomain.BaseDirectory}TEMP\\";
+            Stopwatch stopWatch = new Stopwatch();
+            stopWatch.Start();
+
+            var localStartPath = $"{AppDomain.CurrentDomain.BaseDirectory}TEMP";
 
             try
-            {
-                
+            {               
 
                 var fileName = comboBox1.GetItemText(comboBox1.SelectedItem);
 
-                //解壓縮
-                System.IO.Compression.ZipFile.ExtractToDirectory($"{AppDomain.CurrentDomain.BaseDirectory}{fileName}", unzipFolder);
-
-
-                var fileUploadPath = "TEST/";
-
-                var filePath = "TEST/";
-                
-
-                if (!Directory.Exists(unzipFolder))
+                if (!Directory.Exists(localStartPath))
                 {
-                    Directory.CreateDirectory(unzipFolder);
+                    Directory.CreateDirectory(localStartPath);
                 }
 
 
+                //解壓縮
+                System.IO.Compression.ZipFile.ExtractToDirectory($"{AppDomain.CurrentDomain.BaseDirectory}{fileName}", localStartPath);
+
+
+                var ftpStartPath = $"{config.ip}";
+                
 
                 //處理資料
-                FTPProcess(unzipFolder, config);
-
-                //CreateFolder(config, fileUploadPath );
-
-                //UploadFile(config, fileUploadPath, fileName);
+                FTPProcess(ftpStartPath, localStartPath, config);
 
                 //完成
 
-                MessageBox.Show("更新完成");
+                stopWatch.Stop();
+                TimeSpan ts = stopWatch.Elapsed;
+                MessageBox.Show($"更新完成, 執行時間:{ts.ToString("mm\\:ss\\.ff")}");
             }
             catch (Exception ex)
             {
@@ -120,61 +118,73 @@ namespace WebUploadTool
             }
             finally 
             {
-                var dir = new DirectoryInfo(unzipFolder);
+                var dir = new DirectoryInfo(localStartPath);
                 dir.Delete(true);
             }
-
-
 
 
         }
 
 
-        public static void FTPProcess(string path, config config)
+        public static void FTPProcess(string ftpPath, string localPath, config config)
         {
-            DirectoryInfo d = new DirectoryInfo(path); //Assuming Test is your Folder
+            DirectoryInfo d = new DirectoryInfo(localPath); //Assuming Test is your Folder
 
-            var folders = d.GetDirectories();
+            var folders = d.GetDirectories();                       
 
             foreach (var folder in folders)
             {                
-                CreateFolder(config, $"{path.Replace($"{AppDomain.CurrentDomain.BaseDirectory}TEMP\\", "")}{folder.Name}");
-                FTPProcess($"{path}{folder}", config);
+                CreateFolder($"{ftpPath}/{folder.Name}", config);
+                FTPProcess($"{ftpPath}/{folder.Name}", $"{localPath}\\{folder.Name}", config);
             }
-
 
             var Files = d.GetFiles();
 
             foreach (var file in Files)
             {
-                UploadFile(config, path, file.Name);
+                UploadFile($"{ftpPath}/{file.Name}", $"{localPath}\\{file.Name}", config);
             }
 
         }
 
-        public static void CreateFolder(config config, string folderName)
+        public static void CreateFolder(string ftpPath, config config)
         {
+
             //上傳FTP
-            FtpWebRequest request = (FtpWebRequest)WebRequest.Create($"{config.ip}{folderName}");
+            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpPath);
             request.Method = WebRequestMethods.Ftp.MakeDirectory;
             // This example assumes the FTP site uses anonymous logon.  
             request.Credentials = new NetworkCredential(config.user, config.password);
             request.Proxy = null;
             request.KeepAlive = true;
-            request.UseBinary = true;         
+            request.UseBinary = true;
 
-            // Copy the contents of the file to the request stream.  
-
-            using (var resp = (FtpWebResponse)request.GetResponse())
+            try
             {
-                Console.WriteLine(resp.StatusCode);
+                using (var resp = (FtpWebResponse)request.GetResponse())
+                {
+                    Console.WriteLine(resp.StatusCode);
+                }
+            }
+            catch (WebException ex)
+            {
+                FtpWebResponse response = (FtpWebResponse)ex.Response;
+
+                if (response.StatusCode == FtpStatusCode.ActionNotTakenFileUnavailable)
+                {
+                    return;
+                }
+                else
+                {
+                    throw;
+                }
             }
         }
 
-        public static void UploadFile(config config, string path, string fileName)
+        public static void UploadFile(string ftpPath, string localPath, config config)
         {
             //上傳FTP
-            FtpWebRequest request = (FtpWebRequest)WebRequest.Create($"{config.ip}{path}{fileName}");
+            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(ftpPath);
             request.Method = WebRequestMethods.Ftp.UploadFile;
             // This example assumes the FTP site uses anonymous logon.  
             request.Credentials = new NetworkCredential(config.user, config.password);
@@ -184,7 +194,7 @@ namespace WebUploadTool
         
 
             // Copy the contents of the file to the request stream.  
-            using (StreamReader sourceStream = new StreamReader($"{AppDomain.CurrentDomain.BaseDirectory}{fileName}"))
+            using (StreamReader sourceStream = new StreamReader(localPath))
             {
                 byte[] fileContents = Encoding.UTF8.GetBytes(sourceStream.ReadToEnd());
                 request.ContentLength = fileContents.Length;

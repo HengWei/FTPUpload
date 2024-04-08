@@ -1,5 +1,5 @@
 {
-  "ip": "ftp://localhost:23/",
+  "ip": "ftp://localhost:23",
   "user": "user",
   "password": "123456"
 }
